@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\User;
 use Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Auth; // Tambahkan ini
 
 class AuthController extends Controller
 {
@@ -18,19 +19,20 @@ class AuthController extends Controller
     // Menangani proses registrasi
     public function register(Request $request)
     {
-        // Validasi form registrasi
+        // Validasi input
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
-            'mobile' => 'required|string|max:15',
+            'mobile' => 'required|string|max:15|unique:users,mobile',
             'password' => 'required|string|min:6|confirmed',
         ]);
 
+        // Jika validasi gagal, kembalikan ke form dengan pesan error
         if ($validator->fails()) {
             return redirect()->back()->withErrors($validator)->withInput();
         }
 
-        // Menyimpan data user
+        // Simpan data pengguna baru
         User::create([
             'name' => $request->input('name'),
             'email' => $request->input('email'),
@@ -38,10 +40,10 @@ class AuthController extends Controller
             'password' => Hash::make($request->input('password')),
         ]);
 
+        // Redirect ke halaman login setelah registrasi berhasil
         return redirect()->route('login')->with('success', 'Registration successful. Please login.');
     }
 
-    // Menampilkan halaman login
     public function showLoginForm()
     {
         return view('auth.login');
@@ -50,21 +52,35 @@ class AuthController extends Controller
     // Menangani proses login
     public function login(Request $request)
     {
-        // Validasi login
+        // Validasi input
         $request->validate([
             'mobile' => 'required|string',
             'password' => 'required|string',
         ]);
 
-        // Mencari user berdasarkan mobile dan password
-        $user = User::where('mobile', $request->input('mobile'))->first();
-
-        if ($user && Hash::check($request->input('password'), $user->password)) {
-            // Simpan sesi atau token untuk user yang login
-            auth()->login($user);
+        // Cek kredensial dan login
+        if (Auth::attempt([
+            'mobile' => $request->input('mobile'),
+            'password' => $request->input('password'),
+        ])) {
+            // Hapus dd() untuk production, gunakan hanya untuk debugging
+            // dd(Auth::check(), Auth::user());
             return redirect()->route('dashboard');
         }
 
-        return redirect()->back()->with('error', 'Invalid credentials');
+        // Jika gagal, kembali ke halaman login dengan pesan error
+        return back()->withErrors([
+            'message' => 'Login gagal. Pastikan kredensial Anda benar.',
+        ]);
+    }
+
+    // Metode untuk logout
+    public function logout(Request $request)
+    {
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect()->route('login');
     }
 }
